@@ -43,10 +43,28 @@ type Logger struct {
 	json bool
 }
 
-// New function creates a new Logger instance with the specified parameters
+// New creates a new Logger instance with the specified logging level, output writer, and format.
+//
+// Parameters:
+//
+//	level (int): The minimum log level for messages to be logged. Messages with a level
+//	             lower than this will be ignored. Valid levels are DEBUG, INFO, WARNING,
+//	             ERROR, and FATAL.
+//	writer (io.Writer): An interface for writing log outputs. This can be any writer,
+//	                    such as os.Stdout, a file, etc.
+//	json (bool): A boolean flag indicating the desired output format. If true, logs
+//	             will be formatted as JSON; if false, logs will be in plain text format.
+//
+// Returns:
+//
+//	*Logger: A pointer to the newly created Logger instance
 func New(level int, writer io.Writer, json bool) *Logger {
 	logger := &Logger{
-		level:   level,
+		level: level,
+
+		// Buffered channel with a capacity of 100 messages, allowing non-blocking log writes.
+		// This improves performance by enabling the logger to continue processing logs
+		// asynchronously without waiting for the log consumer to be ready.
 		logChan: make(chan LogMessage, 100),
 		done:    make(chan struct{}),
 		writer:  writer,
@@ -60,7 +78,11 @@ func New(level int, writer io.Writer, json bool) *Logger {
 	return logger
 }
 
-// run method processes incoming log messages
+// run processes incoming log messages from the log channel.
+// It checks if the log message level is above or equal to the logger's set level.
+// If it is, the log message is formatted and written to the specified output.
+// The method runs in a separate goroutine, allowing for asynchronous logging.
+// It also handles FATAL log levels by terminating the program.
 func (l *Logger) run() {
 	for {
 		select {
@@ -116,7 +138,8 @@ func (l *Logger) run() {
 
 // TODO: refactor this for using different methods for each level
 
-// Log method sends a log message to the log channel
+// Log sends a log message to the log channel with the specified log level and message content.
+// It creates a new LogMessage instance with the current timestamp.
 func (l *Logger) Log(level int, message string) {
 	l.logChan <- LogMessage{
 		Level: level,
@@ -125,7 +148,9 @@ func (l *Logger) Log(level int, message string) {
 	}
 }
 
-// logError method handles errors encountered during logging in the run method
+// logError handles errors encountered during the logging process.
+// It constructs an error LogMessage and writes it to the specified writer.
+// If writing fails, it logs the error to stdout.
 func (l *Logger) logError(err error) {
 	errorLog := LogMessage{
 		Level: ERROR,
@@ -139,12 +164,15 @@ func (l *Logger) logError(err error) {
 	}
 }
 
-// Close method signals to terminate the logger
+// Close signals the logger to terminate by closing the done channel.
+// This allows the run method to exit gracefully and stop processing log messages.
 func (l *Logger) Close() {
 	close(l.done)
 }
 
-// GetLevelString converts log level integer to string representation
+// GetLevelString converts a log level integer to its string representation.
+// This function returns the corresponding string for each log level,
+// or "UNKNOWN" if the level is not recognized.
 func GetLevelString(level int) string {
 	switch level {
 	case DEBUG:
