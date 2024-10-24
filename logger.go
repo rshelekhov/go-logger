@@ -41,6 +41,9 @@ type Logger struct {
 	// Flag to determine if logs should be in JSON format
 	// true => output JSON; false => output text
 	json bool
+
+	//
+	fatalEncountered bool
 }
 
 // New creates a new Logger instance with the specified logging level, output writer, and format.
@@ -80,17 +83,28 @@ func New(level int, writer io.Writer, json bool) *Logger {
 
 // run processes incoming log messages from the log channel.
 // It continuously listens for log messages and processes them based on their level.
-// If the log level is FATAL, the program will be terminated after processing the message.
-// The function also listens for a termination signal via the `done` channel to stop the logger.
-// This method runs as a separate goroutine, allowing non-blocking, asynchronous logging.
+// If the log level is FATAL, it processes all remaining messages in the log channel
+// before terminating the program. The function also listens for a termination signal
+// via the `done` channel to stop the logger. This method runs as a separate goroutine,
+// allowing non-blocking, asynchronous logging.
 func (l *Logger) run() {
 	for {
 		select {
 		case logMessage := <-l.logChan:
 			// Process the received log message
 			l.processLogMessage(logMessage)
+
+			// Terminate the program if a FATAL log level is encountered
+			if l.fatalEncountered {
+				// Process remaining log messages in the log channel
+				l.processRemainingLogMessages()
+				os.Exit(1)
+			}
 		case <-l.done:
 			// Stop the logger when termination signal is received
+
+			// Process remaining log messages in the log channel
+			l.processRemainingLogMessages()
 			return
 		}
 	}
@@ -126,9 +140,18 @@ func (l *Logger) processLogMessage(logMessage LogMessage) {
 		l.logError(fmt.Errorf("error writing log message: %w", err))
 	}
 
-	// If the log level is FATAL, terminate the program
+	// If the log level is FATAL, set the fatalEncountered flag to true
 	if logMessage.Level == FATAL {
-		os.Exit(1)
+		l.fatalEncountered = true
+	}
+}
+
+// processRemainingLogMessages drains and processes all messages in the logChan until it is empty.
+// This function is used to ensure that no log messages are left unprocessed before the logger
+// terminates, either due to a FATAL log level or a graceful shutdown via the done channel.
+func (l *Logger) processRemainingLogMessages() {
+	for logMessage := range l.logChan {
+		l.processLogMessage(logMessage)
 	}
 }
 
