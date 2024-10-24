@@ -136,8 +136,6 @@ func (l *Logger) run() {
 	}
 }
 
-// TODO: refactor this for using different methods for each level
-
 // Log sends a log message to the log channel with the specified log level and message content.
 // It creates a new LogMessage instance with the current timestamp.
 func (l *Logger) Log(level int, message string) {
@@ -146,6 +144,70 @@ func (l *Logger) Log(level int, message string) {
 		Msg:   message,
 		Time:  time.Now(),
 	}
+}
+
+// Debug logs a message at the DEBUG level.
+//
+// This method allows you to log detailed information useful for debugging purposes.
+// The DEBUG level is the lowest level, and these logs are typically used during
+// development or troubleshooting to gain insight into the flow and state of the application.
+//
+// Parameters:
+//
+//	message (string): The log message to be recorded.
+func (l *Logger) Debug(message string) {
+	l.Log(DEBUG, message)
+}
+
+// Info logs a message at the INFO level.
+//
+// This method is used to log general informational messages that highlight the
+// progress of the application at a high level. INFO-level logs typically represent
+// successful operations and normal workflow updates.
+//
+// Parameters:
+//
+//	message (string): The log message to be recorded.
+func (l *Logger) Info(message string) {
+	l.Log(INFO, message)
+}
+
+// Warning logs a message at the WARNING level.
+//
+// This method allows logging of potentially harmful situations that don't cause
+// an immediate error but indicate that something unexpected has occurred.
+// It can be used to highlight conditions that could lead to future issues.
+//
+// Parameters:
+//
+//	message (string): The log message to be recorded.
+func (l *Logger) Warning(message string) {
+	l.Log(WARNING, message)
+}
+
+// Error logs a message at the ERROR level.
+//
+// This method is used to log error events that might still allow the application
+// to continue running but indicate a significant issue. ERROR-level logs are
+// crucial for tracking exceptions and failures within the application.
+//
+// Parameters:
+//
+//	message (string): The log message to be recorded.
+func (l *Logger) Error(message string) {
+	l.Log(ERROR, message)
+}
+
+// Fatal logs a message at the FATAL level and terminates the program.
+//
+// This method logs critical issues that result in the termination of the application.
+// After logging the message, the program will be forcibly exited with a status of 1.
+//
+// Parameters:
+//
+//	message (string): The log message to be recorded.
+func (l *Logger) Fatal(message string) {
+	l.Log(FATAL, message)
 }
 
 // logError handles errors encountered during the logging process.

@@ -18,7 +18,7 @@ goroutine, ensuring that logging does not block the main execution of your appli
 ## Upcoming Features
 - Log Level Customization: Provide support for dynamic adjustment of log levels at runtime.
 - Structured File Output: Include both filename and line number in log messages.
-- Enhanced Formatting Options: Add customization options for log output formatting, such as timestamps and date formats.
+- Enhanced Formatting Options: Add customization options for log output formatting, such as timestamps and date formats, colors output, etc.
 
 ## Installation
 To use this library in your project, run:
