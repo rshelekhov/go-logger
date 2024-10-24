@@ -45,11 +45,11 @@ func main() {
     log := logger.New(logger.INFO, os.Stdout, false) // Create a logger for text output
     defer log.Close()
 
-	log.Debug("DEBUG message")
+    log.Debug("DEBUG message")
     log.Info("INFO message")
-	log.Warning("WARNING message")
+    log.Warning("WARNING message")
     log.Error("ERROR message")
-	log.Fatal("FATAL message")
+    log.Fatal("FATAL message")
 }
 ```
 
