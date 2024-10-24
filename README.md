@@ -38,7 +38,7 @@ package main
 
 import (
     "os"
-    "github.com/rshelekhov/logger"
+    "github.com/rshelekhov/go-logger"
 )
 
 func main() {
