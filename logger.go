@@ -79,61 +79,79 @@ func New(level int, writer io.Writer, json bool) *Logger {
 }
 
 // run processes incoming log messages from the log channel.
-// It checks if the log message level is above or equal to the logger's set level.
-// If it is, the log message is formatted and written to the specified output.
-// The method runs in a separate goroutine, allowing for asynchronous logging.
-// It also handles FATAL log levels by terminating the program.
+// It continuously listens for log messages and processes them based on their level.
+// If the log level is FATAL, the program will be terminated after processing the message.
+// The function also listens for a termination signal via the `done` channel to stop the logger.
+// This method runs as a separate goroutine, allowing non-blocking, asynchronous logging.
 func (l *Logger) run() {
 	for {
 		select {
 		case logMessage := <-l.logChan:
-			// Check if the message level is above or equal to the logger's level.
-			// If level is higher than current log level, write log to writer, else do nothing
-			if logMessage.Level >= l.level {
-				var logRecord string
-
-				if l.json {
-					// TODO: Move to separate function
-					// TODO: add converts log level to string
-
-					// If JSON format is specified, marshal the log message to JSON
-					jsonData, err := json.Marshal(logMessage)
-					if err != nil {
-						// Log the error if marshaling fails
-						l.logError(fmt.Errorf("error marshaling log message: %w", err))
-
-						// Skip to the next message
-						continue
-					}
-					logRecord = string(jsonData) + "\n"
-				} else {
-					// TODO: Move to separate function
-
-					// If text format is specified, format the log message as plain text
-					logRecord = fmt.Sprintf("%s [%s] %s\n", // TODO: add opts for date format
-						logMessage.Time.Format(time.RFC3339),
-						GetLevelString(logMessage.Level),
-						logMessage.Msg,
-					)
-				}
-
-				// Write the log record to the specified writer
-				if _, err := fmt.Fprint(l.writer, logRecord); err != nil {
-					l.logError(fmt.Errorf("error writing log message: %w", err))
-				}
-
-				// If the log level is FATAL, terminate the program
-				if logMessage.Level == FATAL {
-					os.Exit(1)
-				}
-			}
-
-		// Check if termination signal received
+			// Process the received log message
+			l.processLogMessage(logMessage)
 		case <-l.done:
-			// Stop the logger
+			// Stop the logger when termination signal is received
 			return
 		}
 	}
+}
+
+// processLogMessage checks the log message level and processes it accordingly.
+// If the log level is below the logger's set level, the message is ignored.
+// If the message meets the required log level, it is either formatted as JSON or plain text
+// based on the logger's configuration, then written to the output.
+// In case of a FATAL log level, the program is terminated after the message is logged.
+func (l *Logger) processLogMessage(logMessage LogMessage) {
+	if logMessage.Level < l.level {
+		// Ignore messages that are below the current log level
+		return
+	}
+
+	var logRecord string
+	var err error
+
+	// Format the log message as JSON or plain text depending on the logger's configuration
+	if l.json {
+		logRecord, err = l.formatJSON(logMessage)
+		if err != nil {
+			l.logError(fmt.Errorf("error formatting log message as JSON: %w", err))
+			return
+		}
+	} else {
+		logRecord = l.formatText(logMessage)
+	}
+
+	// Write the formatted log message to the specified output writer
+	if _, err = fmt.Fprint(l.writer, logRecord); err != nil {
+		l.logError(fmt.Errorf("error writing log message: %w", err))
+	}
+
+	// If the log level is FATAL, terminate the program
+	if logMessage.Level == FATAL {
+		os.Exit(1)
+	}
+}
+
+// formatJSON formats the given log message as a JSON string.
+// It marshals the LogMessage struct into JSON format, returning the string representation.
+// If an error occurs during marshaling, it returns an error.
+func (l *Logger) formatJSON(logMessage LogMessage) (string, error) {
+	jsonData, err := json.Marshal(logMessage)
+	if err != nil {
+		return "", fmt.Errorf("error marshaling log message: %w", err)
+	}
+	return string(jsonData) + "\n", nil
+}
+
+// formatText formats the log message as a plain text string.
+// The format includes the timestamp, log level, and the log message content.
+// The timestamp is formatted using the RFC3339 standard. The log level is converted to a string.
+func (l *Logger) formatText(logMessage LogMessage) string {
+	return fmt.Sprintf("%s [%s] %s\n", // TODO: add opts for date format
+		logMessage.Time.Format(time.RFC3339),
+		GetLevelString(logMessage.Level),
+		logMessage.Msg,
+	)
 }
 
 // Log sends a log message to the log channel with the specified log level and message content.
