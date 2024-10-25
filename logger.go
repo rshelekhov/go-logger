@@ -90,13 +90,15 @@ func New(level int, writer io.Writer, json bool) *Logger {
 func (l *Logger) run() {
 	for {
 		select {
-		case logMessage := <-l.logChan:
+		case logMessage, ok := <-l.logChan:
+			if !ok { // logChan has been closed
+				return
+			}
 			// Process the received log message
 			l.processLogMessage(logMessage)
 
 			// Terminate the program if a FATAL log level is encountered
 			if l.fatalEncountered {
-				// Process remaining log messages in the log channel
 				l.processRemainingLogMessages()
 				os.Exit(1)
 			}
@@ -138,11 +140,6 @@ func (l *Logger) processLogMessage(logMessage LogMessage) {
 	// Write the formatted log message to the specified output writer
 	if _, err = fmt.Fprint(l.writer, logRecord); err != nil {
 		l.logError(fmt.Errorf("error writing log message: %w", err))
-	}
-
-	// If the log level is FATAL, set the fatalEncountered flag to true
-	if logMessage.Level == FATAL {
-		l.fatalEncountered = true
 	}
 }
 
@@ -248,7 +245,14 @@ func (l *Logger) Error(message string) {
 //
 //	message (string): The log message to be recorded.
 func (l *Logger) Fatal(message string) {
+	// Set the fatalEncountered flag to true, indicating a fatal error has occurred.
+	l.fatalEncountered = true
+
+	// Log the message with the FATAL level.
 	l.Log(FATAL, message)
+
+	// Close the logger channels to stop further logging and release resources.
+	l.Close()
 }
 
 // logError handles errors encountered during the logging process.
@@ -267,9 +271,10 @@ func (l *Logger) logError(err error) {
 	}
 }
 
-// Close signals the logger to terminate by closing the done channel.
+// Close signals the logger to terminate by closing the channels.
 // This allows the run method to exit gracefully and stop processing log messages.
 func (l *Logger) Close() {
+	close(l.logChan)
 	close(l.done)
 }
 
