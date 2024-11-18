@@ -38,15 +38,18 @@ package main
 
 import (
     "os"
-    "github.com/rshelekhov/logger"
+    "github.com/rshelekhov/go-logger"
 )
 
 func main() {
     log := logger.New(logger.INFO, os.Stdout, false) // Create a logger for text output
     defer log.Close()
 
-    log.Log(logger.INFO, "INFO message")
-    log.Log(logger.ERROR, "ERROR message")
+    log.Debug("DEBUG message")
+    log.Info("INFO message")
+    log.Warning("WARNING message")
+    log.Error("ERROR message")
+    log.Fatal("FATAL message")
 }
 ```
 
