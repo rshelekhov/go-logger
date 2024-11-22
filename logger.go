@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -29,12 +30,6 @@ type Logger struct {
 	// Minimum log level for logging messages
 	level int
 
-	// Channel for sending log messages
-	logChan chan LogMessage
-
-	// Channel to signal when to stop the logger
-	done chan struct{}
-
 	// Interface for writing log outputs
 	writer io.Writer
 
@@ -42,8 +37,8 @@ type Logger struct {
 	// true => output JSON; false => output text
 	json bool
 
-	//
-	fatalEncountered bool
+	// Mutex for thread-safe log writing
+	mu sync.Mutex
 }
 
 // New creates a new Logger instance with the specified logging level, output writer, and format.
@@ -62,93 +57,10 @@ type Logger struct {
 //
 //	*Logger: A pointer to the newly created Logger instance
 func New(level int, writer io.Writer, json bool) *Logger {
-	logger := &Logger{
-		level: level,
-
-		// Buffered channel with a capacity of 100 messages, allowing non-blocking log writes.
-		// This improves performance by enabling the logger to continue processing logs
-		// asynchronously without waiting for the log consumer to be ready.
-		logChan: make(chan LogMessage, 100),
-		done:    make(chan struct{}),
-		writer:  writer,
-		json:    json,
-	}
-
-	// Start the logging process in a new goroutine
-	go logger.run()
-
-	// Return the new Logger instance
-	return logger
-}
-
-// run processes incoming log messages from the log channel.
-// It continuously listens for log messages and processes them based on their level.
-// If the log level is FATAL, it processes all remaining messages in the log channel
-// before terminating the program. The function also listens for a termination signal
-// via the `done` channel to stop the logger. This method runs as a separate goroutine,
-// allowing non-blocking, asynchronous logging.
-func (l *Logger) run() {
-	for {
-		select {
-		case logMessage, ok := <-l.logChan:
-			if !ok { // logChan has been closed
-				return
-			}
-			// Process the received log message
-			l.processLogMessage(logMessage)
-
-			// Terminate the program if a FATAL log level is encountered
-			if l.fatalEncountered {
-				l.processRemainingLogMessages()
-				os.Exit(1)
-			}
-		case <-l.done:
-			// Stop the logger when termination signal is received
-
-			// Process remaining log messages in the log channel
-			l.processRemainingLogMessages()
-			return
-		}
-	}
-}
-
-// processLogMessage checks the log message level and processes it accordingly.
-// If the log level is below the logger's set level, the message is ignored.
-// If the message meets the required log level, it is either formatted as JSON or plain text
-// based on the logger's configuration, then written to the output.
-// In case of a FATAL log level, the program is terminated after the message is logged.
-func (l *Logger) processLogMessage(logMessage LogMessage) {
-	if logMessage.Level < l.level {
-		// Ignore messages that are below the current log level
-		return
-	}
-
-	var logRecord string
-	var err error
-
-	// Format the log message as JSON or plain text depending on the logger's configuration
-	if l.json {
-		logRecord, err = l.formatJSON(logMessage)
-		if err != nil {
-			l.logError(fmt.Errorf("error formatting log message as JSON: %w", err))
-			return
-		}
-	} else {
-		logRecord = l.formatText(logMessage)
-	}
-
-	// Write the formatted log message to the specified output writer
-	if _, err = fmt.Fprint(l.writer, logRecord); err != nil {
-		l.logError(fmt.Errorf("error writing log message: %w", err))
-	}
-}
-
-// processRemainingLogMessages drains and processes all messages in the logChan until it is empty.
-// This function is used to ensure that no log messages are left unprocessed before the logger
-// terminates, either due to a FATAL log level or a graceful shutdown via the done channel.
-func (l *Logger) processRemainingLogMessages() {
-	for logMessage := range l.logChan {
-		l.processLogMessage(logMessage)
+	return &Logger{
+		level:  level,
+		writer: writer,
+		json:   json,
 	}
 }
 
@@ -174,13 +86,44 @@ func (l *Logger) formatText(logMessage LogMessage) string {
 	)
 }
 
-// Log sends a log message to the log channel with the specified log level and message content.
-// It creates a new LogMessage instance with the current timestamp.
+// Log checks the log message level and processes it accordingly.
+// If the log level is below the logger's set level, the message is ignored.
+// If the message meets the required log level, it is either formatted as JSON or plain text
+// based on the logger's configuration, then written to the output.
+// In case of a FATAL log level, the program is terminated after the message is logged.
 func (l *Logger) Log(level int, message string) {
-	l.logChan <- LogMessage{
+	if level < l.level {
+		// Ignore messages that are below the current log level
+		return
+	}
+
+	logMessage := LogMessage{
 		Level: level,
 		Msg:   message,
 		Time:  time.Now(),
+	}
+
+	// Creates and writes a log message with thread-safe synchronization
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var logRecord string
+	var err error
+
+	// Format the log message as JSON or plain text depending on the logger's configuration
+	if l.json {
+		logRecord, err = l.formatJSON(logMessage)
+		if err != nil {
+			l.logError(fmt.Errorf("error formatting log message as JSON: %w", err))
+			return
+		}
+	} else {
+		logRecord = l.formatText(logMessage)
+	}
+
+	// Write the formatted log message to the specified output writer
+	if _, err = fmt.Fprint(l.writer, logRecord); err != nil {
+		l.logError(fmt.Errorf("error writing log message: %w", err))
 	}
 }
 
@@ -245,14 +188,11 @@ func (l *Logger) Error(message string) {
 //
 //	message (string): The log message to be recorded.
 func (l *Logger) Fatal(message string) {
-	// Set the fatalEncountered flag to true, indicating a fatal error has occurred.
-	l.fatalEncountered = true
-
 	// Log the message with the FATAL level.
 	l.Log(FATAL, message)
 
-	// Close the logger channels to stop further logging and release resources.
-	l.Close()
+	// Exit the program with a status of 1 to indicate a fatal error.
+	os.Exit(1)
 }
 
 // logError handles errors encountered during the logging process.
@@ -271,16 +211,7 @@ func (l *Logger) logError(err error) {
 	}
 }
 
-// Close signals the logger to terminate by closing the channels.
-// This allows the run method to exit gracefully and stop processing log messages.
-func (l *Logger) Close() {
-	close(l.logChan)
-	close(l.done)
-}
-
 // GetLevelString converts a log level integer to its string representation.
-// This function returns the corresponding string for each log level,
-// or "UNKNOWN" if the level is not recognized.
 func GetLevelString(level int) string {
 	switch level {
 	case DEBUG:
