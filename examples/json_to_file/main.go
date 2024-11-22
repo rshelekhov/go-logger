@@ -18,7 +18,6 @@ func main() {
 
 	// Create new logger instance
 	log := logger.New(logger.DEBUG, file, true)
-	defer log.Close()
 
 	// Imitation of logging from multiple goroutines
 	go func() {
