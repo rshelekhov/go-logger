@@ -10,7 +10,6 @@ import (
 func main() {
 	// Create new logger instance
 	log := logger.New(logger.DEBUG, os.Stdout, true)
-	defer log.Close()
 
 	// Imitation of logging from multiple goroutines
 	go func() {
@@ -25,6 +24,9 @@ func main() {
 			time.Sleep(200 * time.Millisecond)
 
 			log.Error(fmt.Sprintf("Goroutine 1 – %s message %d", logger.GetLevelString(logger.ERROR), i))
+			time.Sleep(200 * time.Millisecond)
+
+			log.Fatal(fmt.Sprintf("Goroutine 1 – %s message %d", logger.GetLevelString(logger.FATAL), i))
 			time.Sleep(200 * time.Millisecond)
 		}
 	}()
