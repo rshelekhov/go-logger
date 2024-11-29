@@ -103,10 +103,6 @@ func (l *Logger) Log(level int, message string) {
 		Time:  time.Now(),
 	}
 
-	// Creates and writes a log message with thread-safe synchronization
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	var logRecord string
 	var err error
 
@@ -120,6 +116,10 @@ func (l *Logger) Log(level int, message string) {
 	} else {
 		logRecord = l.formatText(logMessage)
 	}
+
+	// Creates and writes a log message with thread-safe synchronization
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	// Write the formatted log message to the specified output writer
 	if _, err = fmt.Fprint(l.writer, logRecord); err != nil {
