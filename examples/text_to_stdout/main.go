@@ -10,7 +10,6 @@ import (
 func main() {
 	// Create new logger instance
 	log := logger.New(logger.DEBUG, os.Stdout, false)
-	defer log.Close()
 
 	// Imitation of logging from multiple goroutines
 	go func() {
